@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Inyector de Presiones CDA",
+  "version": "1.0.0",
+  "description": "Automatiza la consulta e inyección de presiones vehiculares en Tecmmas.",
+  "permissions": [
+    "sidePanel",
+    "offscreen",
+    "scripting",
+    "tabs",
+    "declarativeNetRequest",
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://192.168.0.100:8040/et/index.php/oficina/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "http://192.168.0.100:8040/et/index.php/oficina/CGestion*"
+      ],
+      "js": [
+        "content_tecmmas_gestion.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Inyector de Presiones CDA",
+    "default_popup": "popup.html"
+  }
+}

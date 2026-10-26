@@ -1,0 +1,238 @@
+
+:root {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #1f2937;
+    background: #f8fafc;
+
+    --primary: #003049;
+    --primary-hover: #034565;
+    --border: #dbe2ea;
+    --muted: #64748b;
+    --success: #16a34a;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    width: 360px;
+    min-height: 300px;
+    margin: 0;
+    background: #f8fafc;
+}
+
+button,
+input,
+select {
+    font: inherit;
+}
+
+.popup-container {
+    padding: 22px;
+}
+
+.popup-header {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+}
+
+.header-icon {
+    display: flex;
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    background: var(--primary);
+    border-radius: 12px;
+}
+
+.header-text h1 {
+    margin: 0;
+    color: var(--primary);
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.header-text p {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.divider {
+    height: 1px;
+    margin: 20px 0;
+    background: #e2e8f0;
+}
+
+/* ==========================================
+   MENSAJES DE ESTADO
+   ========================================== */
+
+.status-message {
+    margin-bottom: 18px;
+    padding: 11px 12px;
+    color: #1e40af;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.status-message[hidden] {
+    display: none;
+}
+
+.status-message.success {
+    color: #166534;
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.status-message.error {
+    color: #991b1b;
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
+.status-message.warning {
+    color: #92400e;
+    background: #fffbeb;
+    border-color: #fde68a;
+}
+
+/* ==========================================
+   FORMULARIO Y SELECTOR DE PLACA
+   ========================================== */
+
+.form-container {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.form-container label {
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.form-container select {
+    width: 100%;
+    height: 43px;
+    padding: 0 35px 0 12px;
+    color: #0f172a;
+    background-color: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    outline: none;
+    cursor: pointer;
+    transition:
+        border-color 150ms ease,
+        box-shadow 150ms ease;
+}
+
+.form-container select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgb(0 48 73 / 12%);
+}
+
+.form-container select:disabled {
+    color: #94a3b8;
+    background-color: #f1f5f9;
+    cursor: not-allowed;
+}
+
+.form-container select option {
+    color: #0f172a;
+    background: #fff;
+}
+
+.input-help {
+    margin: 0 0 9px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+/* ==========================================
+   BOTÓN INYECTAR PRESIONES
+   ========================================== */
+
+#btn-inyectar {
+    display: flex;
+    width: 100%;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    padding: 11px 14px;
+    color: white;
+    background: var(--primary);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    transition:
+        background 150ms ease,
+        transform 150ms ease,
+        opacity 150ms ease;
+}
+
+#btn-inyectar:hover:not(:disabled) {
+    background: var(--primary-hover);
+}
+
+#btn-inyectar:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+#btn-inyectar:focus-visible {
+    outline: 3px solid rgb(0 48 73 / 30%);
+    outline-offset: 2px;
+}
+
+#btn-inyectar:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+#btn-inyectar svg {
+    flex-shrink: 0;
+}
+
+/* ==========================================
+   PIE DE PÁGINA
+   ========================================== */
+
+.popup-footer {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 22px;
+    padding-top: 13px;
+    color: var(--muted);
+    border-top: 1px solid #e2e8f0;
+    font-size: 11px;
+}
+
+.status-indicator {
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    background: var(--success);
+    border-radius: 50%;
+}
+
+.footer-version {
+    margin-left: auto;
+    color: #94a3b8;
+}
