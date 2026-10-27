@@ -1,3 +1,4 @@
+
 {
   "manifest_version": 3,
   "name": "Inyector de Presiones CDA",
@@ -24,7 +25,16 @@
         "content_tecmmas_gestion.js"
       ],
       "run_at": "document_idle"
-    }
+    },
+   {
+  "matches": [
+    "http://192.168.0.100:8040/et/index.php/oficina/gestion/CGPrueba/CGVenPista*"
+  ],
+  "js": [
+    "content_tecmmas_paginaPlaca.js"
+  ],
+  "run_at": "document_idle"
+}
   ],
   "action": {
     "default_title": "Inyector de Presiones CDA",

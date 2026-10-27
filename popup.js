@@ -1,97 +1,599 @@
+const SUPABASE_URL = "https://lyktizihszlbmzzjrqye.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_mm7Jq7xv6eCse0QMySrcVA_7mfvAA9b";
+const EXTENSION_SECRET = "oJafEs8LySXwXlVkFFJZqXXdzKNnaOuk";
+const TENANT_ID = "aaaaaaaa-0000-0000-0000-000000000001";
+
+
+
+
+
+
+
+// ==========================================
+// DECLARAR FUNCION MOSTRAR ESTADOS
+// ==========================================
+
+function mostrarEstado(divHTMLEstado, mensaje, tipo = "") {
+  divHTMLEstado.textContent = mensaje;
+  divHTMLEstado.className = "status-message";
+
+  if (tipo) {
+    divHTMLEstado.classList.add(tipo);
+  }
+}
+
+
+
+
+
+
+
+
+
+// ==========================================
+// REGISTRO DIARIO DE PLACAS
+// ==========================================
+
+const CLAVE_REGISTRO_DIARIO = "registroPresionesDiario";
+
+// ==========================================
+// OBTENER FECHA LOCAL
+// Formato: YYYY-MM-DD
+// ==========================================
+
+function obtenerFechaLocal() {
+  const ahora = new Date();
+
+  const anio = ahora.getFullYear();
+  const mes = String(ahora.getMonth() + 1).padStart(2, "0");
+  const dia = String(ahora.getDate()).padStart(2, "0");
+
+  return `${anio}-${mes}-${dia}`;
+}
+
+// ==========================================
+// INICIALIZAR O LIMPIAR REGISTRO DIARIO
+// ==========================================
+
+async function inicializarRegistroDiario() {
+  const fechaActual = obtenerFechaLocal();
+
+  const resultado = await chrome.storage.local.get(
+    CLAVE_REGISTRO_DIARIO,
+  );
+
+  const registroGuardado = resultado[CLAVE_REGISTRO_DIARIO];
+
+  // Si no existe un registro o pertenece a otro día,
+  // inicializamos uno nuevo.
+  if (
+    !registroGuardado ||
+    registroGuardado.fecha !== fechaActual
+  ) {
+    const registroNuevo = {
+      fecha: fechaActual,
+      placas: {},
+    };
+
+    await chrome.storage.local.set({
+      [CLAVE_REGISTRO_DIARIO]: registroNuevo,
+    });
+
+    console.log(
+      `Registro diario inicializado para ${fechaActual}.`,
+    );
+
+    return registroNuevo;
+  }
+
+  console.log(
+    `Registro diario recuperado para ${fechaActual}.`,
+  );
+
+  return registroGuardado;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ==========================================
+// DECLARAR FUNCION DESHABILITAR CONTROLES
+// ==========================================
+function deshabilitarControles(selectHTMLPlaca, botonHTMLInyectar) {
+  selectHTMLPlaca.disabled = true;
+  botonHTMLInyectar.disabled = true;
+}
+
+// ==========================================
+// DECLARAR FUNCION INYECTAR PLACAS EN EL SELECT
+// ==========================================
+function llenarSelectPlacas(placas, divHTMLEstado, selectHTMLPlaca, botonHTMLInyectar) {
+  placas = Array.isArray(placas)
+    ? [
+        ...new Set(
+          placas
+            .filter((placa) => typeof placa === "string")
+            .map((placa) => placa.trim())
+            .filter((placa) => placa !== ""),
+        ),
+      ]
+    : [];
+  // Limpiar las opciones anteriores
+  selectHTMLPlaca.replaceChildren();
+
+  // Crear la opción inicial
+  const opcionInicial = document.createElement("option");
+  opcionInicial.value = "";
+  opcionInicial.textContent = "Selecciona una placa";
+  opcionInicial.disabled = true;
+  opcionInicial.selected = true;
+
+  selectHTMLPlaca.appendChild(opcionInicial);
+
+  // Crear una opción por cada placa
+  placas.forEach((placa) => {
+    const opcion = document.createElement("option");
+
+    opcion.value = placa;
+    opcion.textContent = placa;
+
+    selectHTMLPlaca.appendChild(opcion);
+  });
+
+  // Habilitar el select solo si hay placas
+  selectHTMLPlaca.disabled = placas.length === 0;
+
+  if (placas.length === 0) {
+    mostrarEstado(divHTMLEstado, "No se encontraron vehículos en pista.", "warning");
+  }
+
+  botonHTMLInyectar.disabled = true;
+}
+
+
+
+
+
+
+
+
+// ==========================================
+// DECLARAR FUNCION ASINCTRONA CONSULTAR PRESIONES EN SUPABASE
+// ==========================================
+
+async function consultarPresionesSupabase(placa, divHTMLEstado) {
+  console.log("Consultando presiones para:", placa);
+
+  const url = `${SUPABASE_URL}/functions/v1/consultar-presiones`;
+
+  const respuesta = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "X-Extension-Secret": EXTENSION_SECRET,
+    },
+    body: JSON.stringify({
+      tenant_id: TENANT_ID,
+      placa: placa,
+    }),
+  });
+
+  let resultado;
+
+  try {
+    resultado = await respuesta.json();
+  } catch {
+    throw new Error("La Edge Function devolvió una respuesta inválida.");
+  }
+
+  if (!respuesta.ok || !resultado.success) {
+    throw new Error(resultado.error || `Error HTTP ${respuesta.status}`);
+  }
+
+  if (!resultado.encontrado) {
+    mostrarEstado(
+      divHTMLEstado,
+      `No se encontró una orden para la placa ${placa}.`,
+      "warning",
+    );
+
+    return resultado;
+  }
+
+  if (resultado.presiones.length === 0) {
+    mostrarEstado(
+      divHTMLEstado,
+      `La orden más reciente de ${placa} no tiene presiones registradas.`,
+      "warning",
+    );
+
+    return resultado;
+  }
+
+  console.log("Orden encontrada:", resultado.orden);
+  console.table(resultado.presiones);
+
+  mostrarEstado(
+    divHTMLEstado,
+    `Se encontraron ${resultado.cantidad_presiones} registros de presión para ${placa}.`,
+    "success",
+  );
+
+  return resultado;
+}
+
+
+
+
+
+
+
+
+// ==========================================
+// DECLARAR FUNCION ASYNC VERIFICAR PESTAÑA ACTIVA
+// ==========================================
+async function verificarPestanaActiva(
+  divHTMLEstado,
+  selectHTMLPlaca,
+  botonHTMLInyectar,
+  estadoPestana,
+) {
+  try {
+    const pestanasGestion = await chrome.tabs.query({
+      url: ["http://192.168.0.100:8040/et/index.php/oficina/CGestion*"],
+    });
+
+    if (pestanasGestion.length === 0) {
+      estadoPestana.id = null;
+      deshabilitarControles(selectHTMLPlaca, botonHTMLInyectar);
+      llenarSelectPlacas([], divHTMLEstado, selectHTMLPlaca, botonHTMLInyectar);
+      mostrarEstado(
+        divHTMLEstado,
+        "No se ha detectado el Panel de gestión de Tecmmas.",
+        "error",
+      );
+      return;
+    }
+
+		//obtiene la pestaña en la que esta parado el usuario
+    const pestanasActivas = await chrome.tabs.query({
+      active: true,
+      lastFocusedWindow: true,
+    });
+
+		//separa esactamente la pestaña activa de la lista de activas
+    const pestanaActiva = pestanasActivas[0];
+
+		//compara entonces si la pestaña abierta o la que tiene el focus es la misma que la pestaña con la url de teccmas, si es asi entonces la guarda en gestionActiva
+    const gestionActiva = pestanaActiva && pestanasGestion.some((pestana) => pestana.id === pestanaActiva.id);
+
+    if (!gestionActiva) {
+      estadoPestana.id = pestanasGestion[0].id;
+      deshabilitarControles(selectHTMLPlaca, botonHTMLInyectar);
+      llenarSelectPlacas([], divHTMLEstado, selectHTMLPlaca, botonHTMLInyectar);
+      mostrarEstado(
+        divHTMLEstado,
+        "Tecmmas está abierto, pero no estás situado en su Panel de gestión. Cambia a esa pestaña para continuar.",
+        "warning",
+      );
+      return;
+    }
+
+    estadoPestana.id = pestanaActiva.id;
+
+    mostrarEstado(
+      divHTMLEstado,
+      "Estás situado en el Panel de gestión de Tecmmas.",
+      "success",
+    );
+
+    console.log("Panel de gestión activo:", pestanaActiva.url);
+
+    const respuesta = await chrome.tabs.sendMessage(estadoPestana.id, {
+      accion: "obtenerPlacas",
+    });
+
+    console.log("Placas obtenidas", respuesta);
+
+    if (respuesta?.ok && Array.isArray(respuesta.placas)) {
+      llenarSelectPlacas(respuesta.placas, divHTMLEstado, selectHTMLPlaca, botonHTMLInyectar);
+    } else {
+      deshabilitarControles(selectHTMLPlaca, botonHTMLInyectar);
+      llenarSelectPlacas([], divHTMLEstado, selectHTMLPlaca, botonHTMLInyectar);
+
+      mostrarEstado(
+        divHTMLEstado,
+        "No fue posible obtener las placas de Tecmmas.",
+        "error",
+      );
+    }
+  } catch (error) {
+    console.error("Error verificando pestaña:", error);
+
+    estadoPestana.id = null;
+    deshabilitarControles(selectHTMLPlaca, botonHTMLInyectar);
+    llenarSelectPlacas([], divHTMLEstado, selectHTMLPlaca, botonHTMLInyectar);
+
+    mostrarEstado(
+      divHTMLEstado,
+      "No fue posible verificar la pestaña de Tecmmas.",
+      "error",
+    );
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+async function inyectarPresionesTecmmas(
+  placa,
+  presiones,
+  estadoPestana,
+) {
+  if (estadoPestana.id === null) {
+    throw new Error("No hay una pestaña de Tecmmas seleccionada.");
+  }
+
+  const respuesta = await chrome.tabs.sendMessage(
+    estadoPestana.id,
+    {
+      accion: "inyectarPresiones",
+      placa,
+      presiones,
+    },
+  );
+
+  if (!respuesta?.ok) {
+    throw new Error(
+      respuesta?.error || "No fue posible inyectar las presiones en Tecmmas.",
+    );
+  }
+
+  return respuesta;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 document.addEventListener("DOMContentLoaded", async () => {
-    const estado = document.getElementById("estado");
-    const selectPlaca = document.getElementById("placa");
-    const botonInyectar = document.getElementById("btn-inyectar");
 
-    // ==========================================
-    // MOSTRAR MENSAJES EN EL POPUP
-    // ==========================================
 
-    function mostrarEstado(mensaje, tipo = "") {
-        estado.textContent = mensaje;
-        estado.className = "status-message";
 
-        if (tipo) {
-            estado.classList.add(tipo);
-        }
+
+// ==========================================
+  // INICIALIZAR REGISTRO DIARIO
+  // ==========================================
+
+  await inicializarRegistroDiario();
+
+  // ==========================================
+  // LIMPIAR OPERACIÓN PENDIENTE ANTERIOR
+  // ==========================================
+
+  await chrome.storage.local.remove("presionesPendientes");
+
+  // ==========================================
+  // RESTO DE TU CÓDIGO ACTUAL
+  // ==========================================
+
+
+
+  // ==========================================
+  // OBTENER ELEMENTOS A MODIFICAR
+  // ==========================================
+  const divHTMLEstado = document.getElementById("estado");
+  const selectHTMLPlaca = document.getElementById("placa");
+  const botonHTMLInyectar = document.getElementById("btn-inyectar");
+
+  const estadoPestana = { id: null };
+
+  // ==========================================
+  // ADD LISTENER DESHABILITAR EL BOTON
+  // ==========================================
+	//cada vez que cambia el select, el boton se deshabilita en el caso de que el select este deshabilitado o el select no tenga valor
+  selectHTMLPlaca.addEventListener("change", () => {
+    botonHTMLInyectar.disabled = selectHTMLPlaca.disabled || selectHTMLPlaca.value === "";
+  });
+
+  // ==========================================
+  // ADD LISTENER CLICK EN EL BOTON
+  // ==========================================
+  botonHTMLInyectar.addEventListener("click", async () => {
+		// Limpiar datos pendientes de una operación anterior.
+
+    const placaSeleccionada = selectHTMLPlaca.value;
+
+    if (!placaSeleccionada) {
+      return;
     }
 
+    botonHTMLInyectar.disabled = true;
+
+		await chrome.storage.local.remove("presionesPendientes");
+
+    mostrarEstado(
+      divHTMLEstado,
+      `Consultando presiones para ${placaSeleccionada}...`,
+      "warning",
+    );
+
+    try {
+			/** 
+       const resultado = await consultarPresionesSupabase(
+    placaSeleccionada,
+    divHTMLEstado,
+  );
+*/
+
+  // ==========================================
+    // DATOS DE PRUEBA
     // ==========================================
-    // DETECTAR PANEL DE GESTIÓN TECMMAS
+
+    const placaPrueba = placaSeleccionada;
+
+
+const presionesPrueba = [
+  // ==========================================
+  // EJE 1: DELANTERO (2 LLANTAS)
+  // ==========================================
+  {
+    eje: 1,
+    posicion: "izquierda",
+    presion_encontrada: 30,
+    presion_ajustada: 32,
+  },
+  {
+    eje: 1,
+    posicion: "derecha",
+    presion_encontrada: 29,
+    presion_ajustada: 32,
+  },
+
+  // ==========================================
+  // EJE 2: TRASERO (2 LLANTAS)
+  // ==========================================
+  {
+    eje: 2,
+    posicion: "izquierda",
+    presion_encontrada: 31,
+    presion_ajustada: 34,
+  },
+  {
+    eje: 2,
+    posicion: "derecha",
+    presion_encontrada: 30,
+    presion_ajustada: 34,
+  },
+
+  // ==========================================
+  // REPUESTO
+  // ==========================================
+  {
+    eje: 2,
+    posicion: "repuesto",
+    presion_encontrada: 28,
+    presion_ajustada: 32,
+  },
+];
+
+
+    // ==========================================
+    // INYECTAR EN TECMMAS
     // ==========================================
 
-    async function detectarPanelGestion() {
-        mostrarEstado("Buscando el Panel de gestión de Tecmmas...");
+		await chrome.storage.local.set({
+    presionesPendientes: {
+      idOrden, // Serial único del botón Ver
+        placa: placaPrueba,
+        presiones: presionesPrueba,
+    },
+});
 
-        // Mantener deshabilitados los controles mientras verificamos
-        selectPlaca.disabled = true;
-        botonInyectar.disabled = true;
+    await inyectarPresionesTecmmas(
+        placaPrueba,
+        presionesPrueba,
+        estadoPestana,
+    );
 
-        try {
-            const pestanas = await chrome.tabs.query({
-                url: [
-                    "http://192.168.0.100:8040/et/index.php/oficina/CGestion",
-                    "http://192.168.0.100:8040/et/index.php/oficina/CGestion?*",
-                    "http://192.168.0.100:8040/et/index.php/oficina/CGestion/*"
-                ]
-            });
+    mostrarEstado(
+        divHTMLEstado,
+        `Prueba de inyección ejecutada para ${placaPrueba}.`,
+        "success",
+    );
 
-            if (pestanas.length === 0) {
-                mostrarEstado(
-                    "No se ha detectado el Panel de gestión de Tecmmas.",
-                    "error"
-                );
+/** 
+if (
+    resultado.encontrado &&
+    resultado.presiones.length > 0
+  ) {
+    await inyectarPresionesTecmmas(
+      placaSeleccionada,
+      resultado.presiones,
+      estadoPestana,
+    );
 
-                console.warn(
-                    "No se encontró ninguna pestaña del Panel de gestión de Tecmmas."
-                );
+    mostrarEstado(
+      divHTMLEstado,
+      `Presiones inyectadas correctamente para ${placaSeleccionada}.`,
+      "success",
+    );
+  }
 
-                return;
-            }
+*/
 
-            const pestanaGestion = pestanas.find(
-                pestana => Number.isInteger(pestana.id)
-            );
+    } catch (error) {
+     console.error("Error procesando las presiones:", error);
 
-            if (!pestanaGestion) {
-                mostrarEstado(
-                    "Se encontró una coincidencia, pero no se pudo identificar la pestaña de Tecmmas.",
-                    "error"
-                );
-
-                return;
-            }
-
-            mostrarEstado(
-                "Panel de gestión de Tecmmas detectado correctamente.",
-                "success"
-            );
-
-            console.log(
-                "Panel de gestión detectado:",
-                pestanaGestion.url
-            );
-
-            // Guardar el ID para utilizarlo en el siguiente paso
-            window.pestanaGestionId = pestanaGestion.id;
-
-        } catch (error) {
-            console.error(
-                "Error al detectar el Panel de gestión:",
-                error
-            );
-
-            mostrarEstado(
-                "Ocurrió un error al intentar detectar el Panel de gestión de Tecmmas.",
-                "error"
-            );
-        }
+  mostrarEstado(
+    divHTMLEstado,
+    error.message || "No fue posible completar la operación.",
+    "error",
+  );
+    } finally {
+      botonHTMLInyectar.disabled = selectHTMLPlaca.disabled || selectHTMLPlaca.value === "";
     }
+  });
 
-    // ==========================================
-    // INICIALIZAR POPUP
-    // ==========================================
+  // ==========================================
+  // ADD LISTENER DE CHROME
+  // ==========================================
 
-    await detectarPanelGestion();
+  chrome.tabs.onActivated.addListener(() => {
+    verificarPestanaActiva(divHTMLEstado, selectHTMLPlaca, botonHTMLInyectar, estadoPestana);
+  });
+
+  chrome.windows.onFocusChanged.addListener(() => {
+    verificarPestanaActiva(divHTMLEstado, selectHTMLPlaca, botonHTMLInyectar, estadoPestana);
+  });
+
+  // ==========================================
+  // INICIALIZAR
+  // ==========================================
+
+  await verificarPestanaActiva(
+    divHTMLEstado,
+    selectHTMLPlaca,
+    botonHTMLInyectar,
+    estadoPestana,
+  );
 });
