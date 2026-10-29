@@ -61,6 +61,14 @@ async function obtenerRegistroDiario() {
 
 
 
+
+
+
+
+
+
+
+
 // ==========================================
 // OBTENER DATOS DE LA FILA
 // ==========================================
@@ -317,6 +325,38 @@ if (document.readyState === "loading") {
 
 
 
+function obtenerOrdenesTabla() {
+  const tbody = document.querySelector("#vEnPista");
+
+  if (!tbody) {
+    return [];
+  }
+
+  return Array.from(tbody.querySelectorAll("tr"))
+    .map((fila) => {
+      const placa = fila
+        .querySelector("td:first-child strong")
+        ?.textContent.trim()
+        .toUpperCase();
+
+      const idOrden = fila
+        .querySelector('button[name="dato"]')
+        ?.value?.trim();
+
+      if (!placa || !idOrden) {
+        return null;
+      }
+
+      return { placa, idOrden };
+    })
+    .filter(Boolean);
+}
+
+
+
+
+
+
 
 
 
@@ -338,88 +378,101 @@ chrome.runtime.onMessage.addListener((mensaje, sender, sendResponse) => {
   // OBTENER PLACAS
   // ==========================================
   if (mensaje.accion === "obtenerPlacas") {
-    const filas = document.querySelectorAll("#vEnPista tr");
+  sendResponse({
+    ok: true,
+    placas: obtenerOrdenesTabla(),
+  });
 
-    const placas = Array.from(filas)
-      .map((fila) => {
-        return fila
-          .querySelector("td:first-child label strong")
-          ?.textContent.trim();
-      })
-      .filter(Boolean);
-
-    console.log("Placas extraídas de Tecmmas:", placas);
-
-    sendResponse({
-      ok: true,
-      placas,
-    });
-
-    return;
-  }
+  return;
+}
 
   // ==========================================
   // INYECTAR PRESIONES
   // ==========================================
   if (mensaje.accion === "inyectarPresiones") {
-    const { placa, presiones } = mensaje;
+  const { idOrden, placa, presiones } = mensaje;
 
-    console.log("Solicitud de inyección recibida:", {
-      placa,
-      presiones,
+  console.log("Solicitud de inyección recibida:", {
+    idOrden,
+    placa,
+    presiones,
+  });
+
+  // Validar los datos recibidos.
+  if (!idOrden || !placa || !Array.isArray(presiones)) {
+    sendResponse({
+      ok: false,
+      error: "La orden, la placa o las presiones no son válidas.",
     });
-
-    // Validar que se recibieron los datos necesarios.
-    if (!placa || !Array.isArray(presiones)) {
-      sendResponse({
-        ok: false,
-        error: "La placa o las presiones recibidas no son válidas.",
-      });
-
-      return;
-    }
-
-  
-
-    const placaBuscada = placa;
-
-    const filas = document.querySelectorAll("#vEnPista tr");
-
-    const filaEncontrada = Array.from(filas).find((fila) => {
-      const placa = fila
-        .querySelector("td:first-child label strong")
-        ?.textContent.trim();
-
-      return placa === placaBuscada;
-    });
-
-    const botonVer = filaEncontrada?.querySelector('button[name="dato"]');
-
-    if (botonVer) {
-      console.log("Botón encontrado:", botonVer);
-      console.log("Valor del botón:", botonVer.value);
-    }
-
-    if (!botonVer) {
-      sendResponse({
-        ok: false,
-        error: `No se encontró el botón Ver para la placa ${placa}.`,
-      });
-      return;
-    }
-
-     sendResponse({
-      ok: true,
-      mensaje: `Se hizo clic en Ver para la placa ${placa}.`,
-    });
-
-    // Hacer clic en el botón Ver
-    botonVer.click();
-
-    console.log(`Clic ejecutado en Ver para la placa ${placa}`);
-
-   
-
     return;
   }
+
+  const filas = document.querySelectorAll("#vEnPista tr");
+
+  // Buscar la orden por su serial único, no solamente por placa.
+  const filaEncontrada = Array.from(filas).find((fila) => {
+    const idOrdenFila = fila
+      .querySelector('button[name="dato"]')
+      ?.value?.trim();
+
+    return idOrdenFila === idOrden;
+  });
+
+  const botonVer = filaEncontrada?.querySelector(
+    'button[name="dato"]'
+  );
+
+  if (!botonVer) {
+    sendResponse({
+      ok: false,
+      error: `No se encontró la orden ${idOrden} para la placa ${placa}.`,
+    });
+    return;
+  }
+
+  // Validar que el serial encontrado corresponda también a la placa.
+  const placaFila = filaEncontrada
+    .querySelector("td:first-child strong")
+    ?.textContent.trim()
+    .toUpperCase();
+
+  if (placaFila !== placa.toUpperCase()) {
+    sendResponse({
+      ok: false,
+      error: "La placa no coincide con la orden seleccionada.",
+    });
+    return;
+  }
+
+  // Guardar los datos antes de abrir la orden.
+  chrome.storage.local.set({
+    presionesPendientes: {
+      idOrden,
+      placa,
+      presiones,
+    },
+  }).then(() => {
+    console.log("Orden preparada para inyección:", idOrden);
+
+    // Abrir exactamente la orden seleccionada.
+    botonVer.click();
+
+    console.log(`Clic ejecutado para la orden ${idOrden}`);
+
+    sendResponse({
+      ok: true,
+      mensaje: `Se abrió la orden ${idOrden} (${placa}).`,
+    });
+  }).catch((error) => {
+    console.error("Error guardando las presiones pendientes:", error);
+
+    sendResponse({
+      ok: false,
+      error: "No fue posible guardar las presiones pendientes.",
+    });
+  });
+
+  // La respuesta se enviará de forma asíncrona.
+  return true;
+}
 });

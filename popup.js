@@ -59,43 +59,41 @@ async function inicializarRegistroDiario() {
   const fechaActual = obtenerFechaLocal();
 
   const resultado = await chrome.storage.local.get(
-    CLAVE_REGISTRO_DIARIO,
+    CLAVE_REGISTRO_DIARIO
   );
 
   const registroGuardado = resultado[CLAVE_REGISTRO_DIARIO];
 
-  // Si no existe un registro o pertenece a otro día,
-  // inicializamos uno nuevo.
   if (
     !registroGuardado ||
-    registroGuardado.fecha !== fechaActual
+    registroGuardado.fecha !== fechaActual ||
+    !registroGuardado.ordenes ||
+    typeof registroGuardado.ordenes !== "object" ||
+    Array.isArray(registroGuardado.ordenes)
   ) {
     const registroNuevo = {
       fecha: fechaActual,
-      placas: {},
+      ordenes: {},
     };
 
+    
     await chrome.storage.local.set({
       [CLAVE_REGISTRO_DIARIO]: registroNuevo,
     });
 
     console.log(
-      `Registro diario inicializado para ${fechaActual}.`,
+      `Registro diario inicializado para ${fechaActual}.`
     );
 
     return registroNuevo;
   }
 
   console.log(
-    `Registro diario recuperado para ${fechaActual}.`,
+    `Registro diario recuperado para ${fechaActual}.`
   );
 
   return registroGuardado;
 }
-
-
-
-
 
 
 
@@ -121,21 +119,15 @@ function deshabilitarControles(selectHTMLPlaca, botonHTMLInyectar) {
 // ==========================================
 // DECLARAR FUNCION INYECTAR PLACAS EN EL SELECT
 // ==========================================
-function llenarSelectPlacas(placas, divHTMLEstado, selectHTMLPlaca, botonHTMLInyectar) {
-  placas = Array.isArray(placas)
-    ? [
-        ...new Set(
-          placas
-            .filter((placa) => typeof placa === "string")
-            .map((placa) => placa.trim())
-            .filter((placa) => placa !== ""),
-        ),
-      ]
-    : [];
-  // Limpiar las opciones anteriores
+
+function llenarSelectPlacas(
+  ordenes,
+  divHTMLEstado,
+  selectHTMLPlaca,
+  botonHTMLInyectar
+) {
   selectHTMLPlaca.replaceChildren();
 
-  // Crear la opción inicial
   const opcionInicial = document.createElement("option");
   opcionInicial.value = "";
   opcionInicial.textContent = "Selecciona una placa";
@@ -144,25 +136,35 @@ function llenarSelectPlacas(placas, divHTMLEstado, selectHTMLPlaca, botonHTMLIny
 
   selectHTMLPlaca.appendChild(opcionInicial);
 
-  // Crear una opción por cada placa
-  placas.forEach((placa) => {
+  const listaOrdenes = Array.isArray(ordenes) ? ordenes : [];
+
+  listaOrdenes.forEach(({ placa, idOrden }) => {
+    if (!placa || !idOrden) return;
+
     const opcion = document.createElement("option");
 
-    opcion.value = placa;
-    opcion.textContent = placa;
+    // El value es el identificador único de la orden.
+    opcion.value = idOrden;
+    opcion.textContent = `${placa} — ${idOrden}`;
+
+    // Conservamos la placa por separado.
+    opcion.dataset.placa = placa;
 
     selectHTMLPlaca.appendChild(opcion);
   });
 
-  // Habilitar el select solo si hay placas
-  selectHTMLPlaca.disabled = placas.length === 0;
-
-  if (placas.length === 0) {
-    mostrarEstado(divHTMLEstado, "No se encontraron vehículos en pista.", "warning");
-  }
-
+  selectHTMLPlaca.disabled = listaOrdenes.length === 0;
   botonHTMLInyectar.disabled = true;
+
+  if (listaOrdenes.length === 0) {
+    mostrarEstado(
+      divHTMLEstado,
+      "No se encontraron órdenes en pista.",
+      "warning"
+    );
+  }
 }
+
 
 
 
@@ -349,23 +351,32 @@ async function verificarPestanaActiva(
 
 
 
+
+
+
+
+
+
+
 async function inyectarPresionesTecmmas(
+  idOrden,
   placa,
   presiones,
-  estadoPestana,
+  estadoPestana
 ) {
   if (estadoPestana.id === null) {
     throw new Error("No hay una pestaña de Tecmmas seleccionada.");
   }
 
   const respuesta = await chrome.tabs.sendMessage(
-    estadoPestana.id,
-    {
-      accion: "inyectarPresiones",
-      placa,
-      presiones,
-    },
-  );
+  estadoPestana.id,
+  {
+    accion: "inyectarPresiones",
+    idOrden,
+    placa,
+    presiones,
+  }
+);
 
   if (!respuesta?.ok) {
     throw new Error(
@@ -406,11 +417,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   await inicializarRegistroDiario();
 
-  // ==========================================
-  // LIMPIAR OPERACIÓN PENDIENTE ANTERIOR
-  // ==========================================
-
-  await chrome.storage.local.remove("presionesPendientes");
+ 
 
   // ==========================================
   // RESTO DE TU CÓDIGO ACTUAL
@@ -441,7 +448,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   botonHTMLInyectar.addEventListener("click", async () => {
 		// Limpiar datos pendientes de una operación anterior.
 
-    const placaSeleccionada = selectHTMLPlaca.value;
+    const opcionSeleccionada =
+  selectHTMLPlaca.selectedOptions[0];
+
+const idOrden = opcionSeleccionada?.value;
+
+const placaSeleccionada =
+  opcionSeleccionada?.dataset.placa;
+
+if (!idOrden || !placaSeleccionada) {
+  return;
+}
 
     if (!placaSeleccionada) {
       return;
@@ -458,20 +475,27 @@ document.addEventListener("DOMContentLoaded", async () => {
     );
 
     try {
-			/** 
+			
        const resultado = await consultarPresionesSupabase(
     placaSeleccionada,
     divHTMLEstado,
   );
-*/
+
+  if (!resultado?.encontrado || !resultado.presiones?.length) {
+  throw new Error(
+    `No se encontraron presiones para ${placaSeleccionada}.`
+  );
+}
+
 
   // ==========================================
     // DATOS DE PRUEBA
     // ==========================================
 
-    const placaPrueba = placaSeleccionada;
+    //const placaPrueba = placaSeleccionada;
 
 
+    /** 
 const presionesPrueba = [
   // ==========================================
   // EJE 1: DELANTERO (2 LLANTAS)
@@ -515,7 +539,7 @@ const presionesPrueba = [
     presion_ajustada: 32,
   },
 ];
-
+*/
 
     // ==========================================
     // INYECTAR EN TECMMAS
@@ -524,42 +548,27 @@ const presionesPrueba = [
 		await chrome.storage.local.set({
     presionesPendientes: {
       idOrden, // Serial único del botón Ver
-        placa: placaPrueba,
-        presiones: presionesPrueba,
+        placa: placaSeleccionada,
+        presiones:  resultado.presiones,
     },
 });
 
-    await inyectarPresionesTecmmas(
-        placaPrueba,
-        presionesPrueba,
-        estadoPestana,
-    );
+   await inyectarPresionesTecmmas(
+  idOrden,
+  placaSeleccionada,
+   resultado.presiones,
+  estadoPestana
+);
 
     mostrarEstado(
         divHTMLEstado,
-        `Prueba de inyección ejecutada para ${placaPrueba}.`,
+        `Inyección ejecutada para ${placaSeleccionada}.`,
         "success",
     );
 
-/** 
-if (
-    resultado.encontrado &&
-    resultado.presiones.length > 0
-  ) {
-    await inyectarPresionesTecmmas(
-      placaSeleccionada,
-      resultado.presiones,
-      estadoPestana,
-    );
 
-    mostrarEstado(
-      divHTMLEstado,
-      `Presiones inyectadas correctamente para ${placaSeleccionada}.`,
-      "success",
-    );
-  }
 
-*/
+
 
     } catch (error) {
      console.error("Error procesando las presiones:", error);

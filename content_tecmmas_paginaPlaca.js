@@ -150,21 +150,34 @@ async function inyectarPresiones(presiones) {
       .toLowerCase();
 
     const eje = Number(presion.eje);
-    const valor = presion.presion_ajustada;
 
-    // Validar la presión ajustada.
+    // Priorizar la presión ajustada.
+    // Si no existe, utilizar la presión encontrada.
+    const valor =
+      presion.presion_ajustada !== null &&
+      presion.presion_ajustada !== undefined &&
+      presion.presion_ajustada !== "" &&
+      Number.isFinite(Number(presion.presion_ajustada))
+        ? presion.presion_ajustada
+        : presion.presion_encontrada;
+
+    // Validar la presión que finalmente se utilizará.
     if (
       valor === null ||
       valor === undefined ||
       valor === "" ||
       !Number.isFinite(Number(valor))
     ) {
-      console.warn("Presión ajustada inválida. Se omite:", presion);
+      console.warn(
+        "No hay una presión válida para esta llanta. Se omite:",
+        presion,
+      );
+
       presionesOmitidas++;
       continue;
     }
 
-    // Obtener el ID del campo que corresponde a la llanta.
+    // Obtener el ID del campo según el eje y la posición.
     const idCampo = obtenerIdCampo(eje, posicion);
 
     if (!idCampo) {
@@ -200,8 +213,6 @@ async function inyectarPresiones(presiones) {
     );
   }
 }
-
-
 
 
 
